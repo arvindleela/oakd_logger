@@ -2,13 +2,9 @@ cmake_minimum_required(VERSION 3.14)
 
 add_compile_options(-Wall -Wextra -Werror -Wfatal-errors)
 
-# Add depthai-core
-# Needs to go before project declaration
-add_subdirectory(depthai-core)
-
 project(oakd_logger VERSION 0.1)
 
-# Add pybind11
+# Add pybind
 add_subdirectory(pybind11)
 
 # Build with symbols
