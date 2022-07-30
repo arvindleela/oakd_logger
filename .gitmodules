@@ -1,3 +1,12 @@
 [submodule "pybind11"]
 	path = pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "depthai-core"]
+	path = depthai-core
+	url = https://github.com/luxonis/depthai-core.git
+[submodule "glog"]
+	path = glog
+	url = https://github.com/google/glog.git
+[submodule "magic_enum"]
+	path = magic_enum
+	url = https://github.com/Neargye/magic_enum.git
