@@ -15,6 +15,15 @@ using TimePoint = std::chrono::time_point<
         nanoseconds>;  //
                        //           std::chrono::steady_clock::duration>;
 using QueueTypePtr = std::shared_ptr<dai::DataOutputQueue>;
+using IMUQueue = std::queue<dai::IMUPacket>;
+
+struct StereoImg {
+  std::shared_ptr<dai::ImgFrame> img_frame;
+  DataStream type;
+};
+
+using IMGQueue = std::queue<StereoImg>;
+using IMGVector = std::vector<StereoImg>;
 
 class DataQueues {
  public:
@@ -28,11 +37,19 @@ class DataQueues {
 
   bool log_queue();
 
+  double log_duration_s() const;
+
  private:
+  std::optional<DataStream> get_next(
+      IMUQueue& imu_queue, IMGQueue& img_queue, dai::IMUPacket& next_imu_packet,
+      std::shared_ptr<dai::ImgFrame>& next_img_frame_ptr) const;
+
   double time_cast(const TimePoint& time) const;
 
   std::unordered_map<DataStream, QueueTypePtr, DataStreamHash> queues_;
+
   std::optional<TimePoint> start_ts_ = std::nullopt;
+  std::optional<TimePoint> last_timestamp_ = std::nullopt;
 };
 
 class Logger {

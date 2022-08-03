@@ -7,7 +7,6 @@
 namespace oakd_logger {
 using MAX_SIZE_T = std::numeric_limits<size_t>();
 static constexpr size_t MAX_IMU_UPDATE_RATE_HZ = 500;
-static constexpr size_t MAX_IMU_BUFFER_SIZE = 1000;  // 10s at 100Hz
 
 // Define various streams
 enum class DataStream : uint8_t {
@@ -49,16 +48,7 @@ struct Config {
     if (imu_update_rate_hz > MAX_IMU_UPDATE_RATE_HZ) {
       return false;
     }
-
-    if (imu_buffer_size() > MAX_IMU_BUFFER_SIZE) {
-      return false;
-    }
-
     return true;
-  }
-
-  size_t imu_buffer_size() const {
-    return static_cast<size_t>(imu_update_rate_hz * imu_buffer_size_s);
   }
 
   // Pipeline config
@@ -66,12 +56,14 @@ struct Config {
       {DataStream::IMU, false},
       {DataStream::LEFT_MONO, false},
       {DataStream::RIGHT_MONO, false},
-      {DataStream::RGB, true}};
+      {DataStream::RGB, true}};  // Setting this to true makes the code too slow
 
   // IMU config
   size_t imu_batch_report_threshold = 1;
   size_t imu_max_batch_reports = 20;
   size_t imu_update_rate_hz = 100;
-  double imu_buffer_size_s = 10;
+
+  // Duration of logging
+  float logging_duration_s = 1.0;
 };
 }  // namespace oakd_logger

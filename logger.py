@@ -12,6 +12,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='OAK-D Logger')
 
     parser.add_argument('logdir', help='Path where logs are written', type=str)
+    parser.add_argument('--duration', help='Duration of logging, s', type=float, default=1.0)
     return vars(parser.parse_args())
 
 def main():

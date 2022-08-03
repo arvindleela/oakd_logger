@@ -32,36 +32,109 @@ bool DataQueues::add(dai::Device* device, const DataStream& type) {
 }
 
 bool DataQueues::log_queue() {
-  bool have_imu = false;
+  IMUQueue imu_packet_queue;
+  IMGVector collated_img_vector;
   for (const auto& [type, queue] : queues_) {
     switch (type) {
       case DataStream::IMU: {
-        const auto& imu_data_vec = queue->getAll<dai::IMUData>();
-        if (!imu_data_vec.empty()) {
-          have_imu = true;
-          std::cout << "Here with " << magic_enum::enum_name(type)
-                    << ", packets.size: " << imu_data_vec.size() << std::endl;
+        const auto imu_queue = queue->tryGetAll<dai::IMUData>();
+        for (const auto imu_packets_ptr : imu_queue) {
+          for (const auto& imu_packet : imu_packets_ptr->packets) {
+            imu_packet_queue.push(imu_packet);
+          }
         }
         break;
       }
       default: {
-        const auto& image_data_vec = queue->getAll<dai::ImgFrame>();
-        if (!image_data_vec.empty()) {
-          const auto image_data = image_data_vec.front();
-          // Set initial timestamp
-          if (!start_ts_) {
-            start_ts_ = image_data->getTimestamp();
-          }
-          std::cout << "Here with " << image_data_vec.size() << " images  "
-                    << magic_enum::enum_name(type) << ", "
-                    << time_cast(image_data->getTimestamp()) << std::endl;
-          cv::imshow(std::string(magic_enum::enum_name(type)),
-                     image_data->getCvFrame());
+        // All other types are images
+        const auto img_vec = queue->tryGetAll<dai::ImgFrame>();
+        for (const auto img : img_vec) {
+          collated_img_vector.push_back({.type = type, .img_frame = img});
         }
       }
     }
   }
+
+  // Sort collated_image_vector
+  std::sort(collated_img_vector.begin(), collated_img_vector.end(),
+            [](const auto& a, const auto& b) {
+              return a.img_frame->getTimestamp() < b.img_frame->getTimestamp();
+            });
+
+  IMGQueue img_queue;
+  for (const auto img : collated_img_vector) {
+    img_queue.push(img);
+  }
+
+  // Go over imu_packet_queue and img_queue
+  dai::IMUPacket next_imu_packet;
+  std::shared_ptr<dai::ImgFrame> next_img_frame_ptr = nullptr;
+
+  auto next_type = get_next(imu_packet_queue, img_queue, next_imu_packet,
+                            next_img_frame_ptr);
+  TimePoint next_timestamp = TimePoint::max();
+  while (next_type != std::nullopt) {
+    int sequence_num = -1;
+    if (*next_type == DataStream::IMU) {
+      next_timestamp = next_imu_packet.acceleroMeter.timestamp.get();
+      sequence_num = next_imu_packet.acceleroMeter.sequence;
+    } else {
+      next_timestamp = next_img_frame_ptr->getTimestamp();
+      sequence_num = next_img_frame_ptr->getSequenceNum();
+    }
+
+    if (!start_ts_) {
+      start_ts_ = next_timestamp;
+    }
+
+    LOG(INFO) << "Next sensor is " << magic_enum::enum_name(*next_type)
+              << " with ts: " << time_cast(next_timestamp)
+              << ", sequence num: " << sequence_num << std::endl;
+
+    *last_timestamp_ = next_timestamp;
+
+    // Get the next chronologically ordered sensor
+    next_type = get_next(imu_packet_queue, img_queue, next_imu_packet,
+                         next_img_frame_ptr);
+  }
+
   return true;
+}
+
+double DataQueues::log_duration_s() const {
+  return time_cast(*last_timestamp_);
+}
+
+std::optional<DataStream> DataQueues::get_next(
+    IMUQueue& imu_queue, IMGQueue& img_queue, dai::IMUPacket& next_imu_packet,
+    std::shared_ptr<dai::ImgFrame>& next_img_frame_ptr) const {
+  // If there is no data, then early exit
+  if (imu_queue.empty() && img_queue.empty()) {
+    return std::nullopt;
+  }
+
+  // Note that Gyroscope and Accelerometer are synchronized
+  const TimePoint imu_time =
+      imu_queue.empty() ? TimePoint::max()
+                        : imu_queue.front().acceleroMeter.timestamp.get();
+  const TimePoint img_time = img_queue.empty()
+                                 ? TimePoint::max()
+                                 : img_queue.front().img_frame->getTimestamp();
+  const auto img_type =
+      img_queue.empty() ? DataStream::INVALID : img_queue.front().type;
+
+  auto ret_type = DataStream::INVALID;
+
+  if (imu_time < img_time) {
+    ret_type = DataStream::IMU;
+    next_imu_packet = imu_queue.front();
+    imu_queue.pop();
+  } else {
+    ret_type = img_type;
+    next_img_frame_ptr = img_queue.front().img_frame;
+    img_queue.pop();
+  };
+  return ret_type;
 }
 
 Logger::Logger(const std::string_view logdir, const Config& config)
@@ -127,19 +200,22 @@ bool Logger::initialize() {
 }
 
 void Logger::start_logging() {
-  std::cout << "Queue size: " << device_->getOutputQueueNames().size()
-            << std::endl;
+  LOG(INFO) << "Queue size: " << device_->getOutputQueueNames().size();
   for (const auto& qn : device_->getOutputQueueNames()) {
-    std::cout << qn << std::endl;
+    LOG(INFO) << qn;
   }
+  LOG(INFO) << "Logging duration " << config_.logging_duration_s << "s.";
 
   while (true) {
     data_queues_.log_queue();
-    int key = cv::waitKey(1);
-    if (key == 'q' || key == 'Q') {
+
+    if (data_queues_.log_duration_s() > config_.logging_duration_s) {
       break;
     }
   }
+
+  LOG(INFO) << "Finished logging after " << data_queues_.log_duration_s()
+            << " s.";
 }
 
 bool Logger::configure_and_add_imu() {
@@ -241,10 +317,9 @@ bool Logger::configure_and_add_rgb_camera() {
     return false;
   }
 
-  camera_node->setPreviewSize(300, 300);
   camera_node->setBoardSocket(CAMERA_SOCKET.at(DataStream::RGB));
   camera_node->setResolution(
-      dai::ColorCameraProperties::SensorResolution::THE_720_P);
+      dai::ColorCameraProperties::SensorResolution::THE_1080_P);
   camera_node->setInterleaved(false);
   camera_node->setColorOrder(dai::ColorCameraProperties::ColorOrder::RGB);
 
@@ -253,7 +328,7 @@ bool Logger::configure_and_add_rgb_camera() {
       std::string(magic_enum::enum_name(DataStream::RGB)));
 
   // Link camera node
-  camera_node->preview.link(link_camera_out->input);
+  camera_node->video.link(link_camera_out->input);
 
   return true;
 }
