@@ -10,11 +10,11 @@ static constexpr size_t MAX_IMU_UPDATE_RATE_HZ = 500;
 
 // Define various streams
 enum class DataStream : uint8_t {
-  IMU,
-  LEFT_MONO,
-  RIGHT_MONO,
-  RGB,
-  INVALID,
+  IMU = 0,
+  LEFT_MONO = 1,
+  RIGHT_MONO = 2,
+  RGB = 3,
+  INVALID = 4,
 };
 
 struct DataStreamHash {
@@ -56,10 +56,10 @@ struct Config {
       {DataStream::IMU, false},
       {DataStream::LEFT_MONO, false},
       {DataStream::RIGHT_MONO, false},
-      {DataStream::RGB, true}};  // Setting this to true makes the code too slow
+      {DataStream::RGB, false}};
 
   // IMU config
-  size_t imu_batch_report_threshold = 1;
+  size_t imu_batch_report_threshold = 20;
   size_t imu_max_batch_reports = 20;
   size_t imu_update_rate_hz = 100;
 

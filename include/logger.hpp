@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "config.hpp"
+#include "serialization.hpp"
 
 namespace oakd_logger {
 
@@ -35,7 +36,7 @@ class DataQueues {
    */
   bool add(dai::Device* device, const DataStream& type);
 
-  bool log_queue();
+  bool log_queue(OAKDSerializer& serializer);
 
   double log_duration_s() const;
 
@@ -57,6 +58,10 @@ class Logger {
   Logger(const std::string_view logdir, const Config& config);
 
   bool initialize();
+
+  bool prepare_output_log(std::string_view output_path) {
+    return serializer_.prepare_output_log(output_path);
+  };
 
   /**
    * @brief:    Start logging
@@ -82,6 +87,8 @@ class Logger {
    */
   bool configure_and_add_rgb_camera();
 
+  OAKDSerializer serializer_;
+
   // Logger configuration
   Config config_;
 
@@ -91,11 +98,6 @@ class Logger {
   // Sensor queue
   std::unique_ptr<dai::Pipeline> pipeline_ = nullptr;
   std::unique_ptr<dai::Device> device_ = nullptr;
-  std::shared_ptr<dai::DataOutputQueue> left_cam_queue_ = nullptr;
-
-  std::shared_ptr<dai::node::MonoCamera> left_cam_node_ = nullptr;
-  std::shared_ptr<dai::node::MonoCamera> right_cam_node_ = nullptr;
-  std::shared_ptr<dai::node::ColorCamera> rgb_cam_node_ = nullptr;
 
   // Initialized
   bool initialized_ = false;

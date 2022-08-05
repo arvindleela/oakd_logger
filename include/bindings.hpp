@@ -15,6 +15,10 @@ class OAKDLoggerWrapper {
 
   void start_logging() { return logger_->start_logging(); }
 
+  bool prepare_output_log(std::string_view output_path) {
+    return logger_->prepare_output_log(output_path);
+  }
+
  private:
   std::unique_ptr<Logger> logger_;
 };
