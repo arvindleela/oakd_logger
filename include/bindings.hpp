@@ -15,6 +15,10 @@ class OAKDLoggerWrapper {
 
   void start_logging() { return logger_->start_logging(); }
 
+  void replay(std::string_view input_file) {
+    return logger_->replay(input_file);
+  }
+
   bool prepare_output_log(std::string_view output_path) {
     return logger_->prepare_output_log(output_path);
   }

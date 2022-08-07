@@ -39,7 +39,7 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
     switch (type) {
       case DataStream::IMU: {
         const auto IMUData_queue = queue->tryGetAll<dai::IMUData>();
-        for (const auto imu_data : IMUData_queue) {
+        for (const auto& imu_data : IMUData_queue) {
           for (const auto& imu_packet : imu_data->packets) {
             imu_packet_queue.push(imu_packet);
           }
@@ -49,7 +49,7 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
       default: {
         // All other types are images
         const auto ImgData_queue = queue->tryGetAll<dai::ImgFrame>();
-        for (const auto img : ImgData_queue) {
+        for (const auto& img : ImgData_queue) {
           collated_img_vector.push_back({.type = type, .img_frame = img});
         }
       }
@@ -63,7 +63,7 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
             });
 
   IMGQueue img_queue;
-  for (const auto img : collated_img_vector) {
+  for (const auto& img : collated_img_vector) {
     img_queue.push(img);
   }
 
@@ -78,6 +78,11 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
     int sequence_num = -1;
     if (*next_type == DataStream::IMU) {
       next_timestamp = next_imu_packet.acceleroMeter.timestamp.get();
+
+      if (!start_ts_) {
+        start_ts_ = next_timestamp;
+      }
+
       sequence_num = next_imu_packet.acceleroMeter.sequence;
 
       // Write next_imu_packet if possible
@@ -85,6 +90,11 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
                                   next_imu_packet);
     } else {
       next_timestamp = next_img_frame_ptr->getTimestamp();
+
+      if (!start_ts_) {
+        start_ts_ = next_timestamp;
+      }
+
       sequence_num = next_img_frame_ptr->getSequenceNum();
 
       // Write num_cam_packet if possible
@@ -92,11 +102,7 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
                                      next_img_frame_ptr);
     }
 
-    if (!start_ts_) {
-      start_ts_ = next_timestamp;
-    }
-
-    LOG(INFO) << "Next sensor is " << magic_enum::enum_name(*next_type)
+    LOG(INFO) << "Writing " << magic_enum::enum_name(*next_type)
               << " with ts: " << time_cast(next_timestamp)
               << ", sequence num: " << sequence_num << std::endl;
 
@@ -234,6 +240,21 @@ void Logger::start_logging() {
   LOG(ERROR) << serializer_.info();
 }
 
+void Logger::replay(std::string_view input_file) {
+  bool input_stream_success = serializer_.prepare_input_stream(input_file);
+
+  LOG(INFO) << "Read from file " << input_file
+            << ", success: " << input_stream_success << std::endl;
+
+  bool done_parsing = input_stream_success;
+  while (done_parsing) {
+    done_parsing = serializer_.read_input_file();
+  }
+
+  LOG(INFO) << "Finished replay.";
+  LOG(ERROR) << serializer_.info();
+}
+
 bool Logger::configure_and_add_imu() {
   if (config_.disable_stream.at(DataStream::IMU)) {
     LOG(ERROR) << "IMU is disabled by config.";
@@ -336,7 +357,7 @@ bool Logger::configure_and_add_rgb_camera() {
   camera_node->setBoardSocket(CAMERA_SOCKET.at(DataStream::RGB));
   camera_node->setResolution(
       dai::ColorCameraProperties::SensorResolution::THE_1080_P);
-  camera_node->setPreviewSize(1280, 720);
+  camera_node->setPreviewSize(RGB_PREVIEW_COLS, RGB_PREVIEW_ROWS);
   camera_node->setInterleaved(false);
   camera_node->setColorOrder(dai::ColorCameraProperties::ColorOrder::RGB);
 

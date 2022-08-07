@@ -1,35 +1,16 @@
 #pragma once
 #include <depthai/depthai.hpp>
 #include <limits>
-#include <unordered_map>
 #include <unordered_set>
+
+#include "logger_types.hpp"
 
 namespace oakd_logger {
 using MAX_SIZE_T = std::numeric_limits<size_t>();
 static constexpr size_t MAX_IMU_UPDATE_RATE_HZ = 500;
 
-// Define various streams
-enum class DataStream : uint8_t {
-  IMU = 0,
-  LEFT_MONO = 1,
-  RIGHT_MONO = 2,
-  RGB = 3,
-  INVALID = 4,
-};
-
-struct DataStreamHash {
-  template <typename T>
-  uint8_t operator()(T t) const {
-    return static_cast<uint8_t>(t);
-  }
-};
-
-static const std::unordered_set<DataStream> MONO_CAMERAS(
-    {DataStream::LEFT_MONO, DataStream::RIGHT_MONO});
-static const std::unordered_map<DataStream, dai::CameraBoardSocket>
-    CAMERA_SOCKET = {{DataStream::LEFT_MONO, dai::CameraBoardSocket::LEFT},
-                     {DataStream::RIGHT_MONO, dai::CameraBoardSocket::RIGHT},
-                     {DataStream::RGB, dai::CameraBoardSocket::RGB}};
+static constexpr size_t RGB_PREVIEW_ROWS = 720;
+static constexpr size_t RGB_PREVIEW_COLS = 1280;
 
 // Define buffer sizes
 static const std::unordered_map<DataStream, size_t> QUEUE_BUFFER_SIZE = {

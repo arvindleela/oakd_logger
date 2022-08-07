@@ -1,6 +1,7 @@
 import sys
 sys.path.insert(0, "build")
 
+import logging
 from pathlib import Path
 import argparse
 from OAKDLogger import OAKDLogger
@@ -12,24 +13,31 @@ def parse_args():
     parser = argparse.ArgumentParser(description='OAK-D Logger')
 
     parser.add_argument('logdir', help='Path where logs are written', type=str)
-    parser.add_argument('--op-file', help='Output binary file name', type=str, default=None)
-    parser.add_argument('--duration', help='Duration of logging, s', type=float, default=1.0)
-    return vars(parser.parse_args())
+    parser.add_argument('--output', help='Output binary file name', type=str, default=None)
+    parser.add_argument('--input', help='Input binary file name. If specified replay file', type=str, default=None)
+    parser.add_argument('--duration', help='Duration of logging, s', type=float, default=1e6)
+    return parser.parse_args()
 
 def main():
     args = parse_args()
-    logger = OAKDLogger(args)
+    logger = OAKDLogger(vars(args))
 
-    if not logger.initialize():
-        raise Exception('Logger initialize failed.')
+    if args.input is None:
+        # In logging mode
+        logging.info(f"In logging mode ...")
+        if args.output is not None:
+            op_file = Path(args.logdir) / args.output
+            if not logger.prepare_output_log(op_file.as_posix()):
+                raise Exception('Unable to prepare output log')
 
-    if args['op_file'] is not None:
-        op_file = Path(args['logdir']) / args['op_file']
-        if not logger.prepare_output_log(op_file.as_posix()):
-            raise Exception('Unable to prepare output log')
+        if not logger.initialize():
+            raise Exception('Logger initialize failed.')
 
-    # Start logging
-    logger.start_logging()
+        # Start logging
+        logger.start_logging()
+    else:
+        logging.info(f"In replay mode ...")
+        logger.replay(args.input)
 
 if __name__ == '__main__':
     main()

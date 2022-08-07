@@ -7,6 +7,6 @@
 [submodule "glog"]
 	path = glog
 	url = https://github.com/google/glog.git
-[submodule "magic_enum"]
-	path = magic_enum
-	url = https://github.com/Neargye/magic_enum.git
+[submodule "utilities"]
+	path = utilities
+	url = https://github.com/arvindleela/utilities.git

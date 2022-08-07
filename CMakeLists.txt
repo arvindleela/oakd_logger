@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.14)
-set(OpenCV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build_opencv")
 
 add_compile_options(-Wall -Wextra -Werror -Wfatal-errors)
 
@@ -12,6 +11,9 @@ add_subdirectory(pybind11)
 
 # Add glog
 add_subdirectory(glog)
+
+# Add utilities
+add_subdirectory(utilities)
 
 # Dependencies (optional, only used for example)
 find_package(OpenCV REQUIRED)
@@ -31,7 +33,8 @@ pybind11_add_module(${PROJECT_NAME} ${SOURCES})
 
 include_directories(include
                     pybind11/include
-                    magic_enum/include
+                    utilities/magic_enum/include
+                    utilities/include
                     )
 
 # Link with libraries
@@ -41,5 +44,10 @@ target_link_libraries(${PROJECT_NAME}
     ${OpenCV_LIBS} # optional, used for example
     glog::glog
     )
+
+target_compile_options(${PROJECT_NAME} PUBLIC -fPIC)
+add_compile_options(-fPIC)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fpic")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpic")
 
 

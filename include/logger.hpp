@@ -6,21 +6,18 @@
 #include <optional>
 
 #include "config.hpp"
+#include "logger_types.hpp"
+#include "preview.hpp"
 #include "serialization.hpp"
 
 namespace oakd_logger {
 
-using TimePoint = std::chrono::time_point<
-    std::chrono::steady_clock,
-    std::chrono::
-        nanoseconds>;  //
-                       //           std::chrono::steady_clock::duration>;
 using QueueTypePtr = std::shared_ptr<dai::DataOutputQueue>;
 using IMUQueue = std::queue<dai::IMUPacket>;
 
 struct StereoImg {
-  std::shared_ptr<dai::ImgFrame> img_frame;
   DataStream type;
+  std::shared_ptr<dai::ImgFrame> img_frame;
 };
 
 using IMGQueue = std::queue<StereoImg>;
@@ -68,6 +65,11 @@ class Logger {
    */
   void start_logging();
 
+  /**
+   * @brief:    Replay from file
+   */
+  void replay(std::string_view input_file);
+
  private:
   /**
    * @brief:    Configure IMU and add to pipeline
@@ -88,6 +90,7 @@ class Logger {
   bool configure_and_add_rgb_camera();
 
   OAKDSerializer serializer_;
+  // OAKDPreviewer preview_;
 
   // Logger configuration
   Config config_;
