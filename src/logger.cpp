@@ -86,8 +86,7 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
       sequence_num = next_imu_packet.acceleroMeter.sequence;
 
       // Write next_imu_packet if possible
-      serializer.write_imu_packet(*next_type, time_cast(next_timestamp),
-                                  next_imu_packet);
+      serializer.write_imu_packet(time_cast(next_timestamp), next_imu_packet);
     } else {
       next_timestamp = next_img_frame_ptr->getTimestamp();
 
@@ -237,7 +236,7 @@ void Logger::start_logging() {
 
   LOG(INFO) << "Finished logging after " << data_queues_.log_duration_s()
             << " s. ";
-  LOG(ERROR) << serializer_.info();
+  LOG(ERROR) << serializer_.output_file_info();
 }
 
 void Logger::replay(std::string_view input_file) {
@@ -248,11 +247,11 @@ void Logger::replay(std::string_view input_file) {
 
   bool done_parsing = input_stream_success;
   while (done_parsing) {
-    done_parsing = serializer_.read_input_file();
+    done_parsing = serializer_.read_input_stream();
   }
 
   LOG(INFO) << "Finished replay.";
-  LOG(ERROR) << serializer_.info();
+  LOG(ERROR) << serializer_.input_file_info();
 }
 
 bool Logger::configure_and_add_imu() {

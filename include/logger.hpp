@@ -56,8 +56,13 @@ class Logger {
 
   bool initialize();
 
-  bool prepare_output_log(std::string_view output_path) {
-    return serializer_.prepare_output_log(output_path);
+  /**
+   * @brief:    Prepare logging at a given output path
+   * @param[in] output_path:    Output path binary file
+   * @return:   True, if file is successfully opened
+   */
+  bool prepare_output_stream(std::string_view output_path) {
+    return serializer_.prepare_output_stream(output_path);
   };
 
   /**

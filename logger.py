@@ -27,7 +27,7 @@ def main():
         logging.info(f"In logging mode ...")
         if args.output is not None:
             op_file = Path(args.logdir) / args.output
-            if not logger.prepare_output_log(op_file.as_posix()):
+            if not logger.prepare_output_stream(op_file.as_posix()):
                 raise Exception('Unable to prepare output log')
 
         if not logger.initialize():

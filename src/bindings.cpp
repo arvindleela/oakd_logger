@@ -18,7 +18,7 @@ PYBIND11_MODULE(OAKDLogger, m) {
   py::class_<OAKDLoggerWrapper>(m, "OAKDLogger")
       .def(py::init<const py::dict&>())
       .def("initialize", &OAKDLoggerWrapper::initialize)
-      .def("prepare_output_log", &OAKDLoggerWrapper::prepare_output_log)
+      .def("prepare_output_stream", &OAKDLoggerWrapper::prepare_output_stream)
       .def("start_logging", &OAKDLoggerWrapper::start_logging)
       .def("replay", &OAKDLoggerWrapper::replay);
 };
