@@ -6,17 +6,9 @@
 #include "config.hpp"
 #include "logger_types.hpp"
 #include "magic_enum.hpp"
+#include "misc_utilities.hpp"
 
 namespace oakd_logger {
-
-/**
- * @brief:  Hash DataStream type to a size_t
- * @param[in]   type:   DataStream type
- * @return: A unique hash corresponding to this type
- */
-inline size_t to_hash(const DataStream& type) {
-  return std::hash<std::string_view>{}(magic_enum::enum_name(type));
-}
 
 class OAKDSerializer {
  public:
@@ -30,7 +22,9 @@ class OAKDSerializer {
     for (const auto& type : all_types) {
       num_packets_written_.insert({type, 0});
       num_packets_read_.insert({type, 0});
-      const size_t hash = to_hash(type);
+      const uint64_t hash =
+          Utilities::Misc::dirty_string_hash(magic_enum::enum_name(type));
+
       DataStream_to_log_type_.insert({type, hash});
       log_type_to_DataStream_.insert({hash, type});
     }

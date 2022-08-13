@@ -43,6 +43,7 @@ target_link_libraries(${PROJECT_NAME}
     depthai::opencv
     ${OpenCV_LIBS} # optional, used for example
     glog::glog
+    utilities
     )
 
 target_compile_options(${PROJECT_NAME} PUBLIC -fPIC)
