@@ -1,6 +1,7 @@
 #pragma once
 #include <fstream>
 #include <functional>
+#include <optional>
 #include <sstream>
 
 #include "config.hpp"
@@ -129,11 +130,14 @@ class OAKDSerializer {
 
   /**
    * @brief:    Read input stream
-   * @return:   True, if success
+   * @param[in] imu_packet: IMU packet
+   * @param[in] cam_packet: Camera packet
+   * @return:   DataStream type if read is successfull
    */
-  bool read_input_stream() {
-    if (!in_file_.is_open()) {
-      return false;
+  std::optional<DataStream> read_input_stream(IMUPacket &imu_packet,
+                                              CameraPacket &cam_packet) {
+    if (!in_file_.is_open() || in_file_.peek() == EOF) {
+      return std::nullopt;
     }
 
     size_t type_hash;
@@ -145,8 +149,6 @@ class OAKDSerializer {
                                 ? log_type_to_DataStream_.at(type_hash)
                                 : DataStream::INVALID;
 
-    IMUPacket imu_packet;
-    cv::Mat image;
     if (type == DataStream::IMU) {
       in_file_.read(reinterpret_cast<char*>(&imu_packet), sizeof imu_packet);
     } else if (type != DataStream::INVALID) {
@@ -161,12 +163,12 @@ class OAKDSerializer {
       in_file_.read(reinterpret_cast<char*>(&ncols), sizeof ncols);
       in_file_.read(reinterpret_cast<char*>(&img_type), sizeof img_type);
 
-      CameraPacket cam_packet(nrows, ncols, img_type);
+      cam_packet = CameraPacket(nrows, ncols, img_type);
+      cam_packet.timestamp = timestamp;
       cv::Mat& image = cam_packet.image;
 
       const size_t nbytes = image.total() * image.elemSize();
-      in_file_.read(reinterpret_cast<char*>(image.ptr()), nbytes);
-
+      in_file_.read(reinterpret_cast<char *>(image.ptr()), nbytes);
     } else {
       std::cout << "Got an INVALID packet hash: " << type_hash << std::endl;
     }
@@ -174,9 +176,10 @@ class OAKDSerializer {
     // Record read packets
     if (type != DataStream::INVALID) {
       num_packets_read_.at(type) += 1;
+      return type;
     }
 
-    return in_file_.peek() != EOF;
+    return std::nullopt;
   }
 
   /**

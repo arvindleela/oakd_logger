@@ -240,15 +240,31 @@ void Logger::start_logging() {
 }
 
 void Logger::replay(std::string_view input_file) {
-  bool input_stream_success = serializer_.prepare_input_stream(input_file);
-
-  LOG(INFO) << "Read from file " << input_file
-            << ", success: " << input_stream_success << std::endl;
-
-  bool done_parsing = input_stream_success;
-  while (done_parsing) {
-    done_parsing = serializer_.read_input_stream();
+  if (!serializer_.prepare_input_stream(input_file)) {
+    LOG(ERROR) << "Error reading from file " << input_file;
+    return;
   }
+
+  LOG(INFO) << "Read from file " << input_file << ", success. ";
+
+  std::optional<DataStream> type = std::nullopt;
+
+  IMUPacket imu_packet;
+  CameraPacket cam_packet;
+
+  cv::namedWindow("Preview", cv::WINDOW_NORMAL);
+  do {
+    type = serializer_.read_input_stream(imu_packet, cam_packet);
+
+    // Update preview
+    if (type) {
+      preview_.update(*type, imu_packet, cam_packet);
+
+      cv::imshow("Preview", *preview_.preview_img());
+      cv::waitKey(15);
+    }
+
+  } while (type);
 
   LOG(INFO) << "Finished replay.";
   LOG(ERROR) << serializer_.input_file_info();

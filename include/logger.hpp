@@ -95,7 +95,7 @@ class Logger {
   bool configure_and_add_rgb_camera();
 
   OAKDSerializer serializer_;
-  // OAKDPreviewer preview_;
+  OAKDPreviewer preview_;
 
   // Logger configuration
   Config config_;
