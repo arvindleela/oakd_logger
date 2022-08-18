@@ -14,10 +14,10 @@ static constexpr size_t RGB_PREVIEW_COLS = 1280;
 
 // Define buffer sizes
 static const std::unordered_map<DataStream, size_t> QUEUE_BUFFER_SIZE = {
-    {DataStream::IMU, 400 /* 2s at 200Hz */},
-    {DataStream::LEFT_MONO, 60 /* 2s at 30Hz */},
-    {DataStream::RIGHT_MONO, 60 /* 2s at 30Hz */},
-    {DataStream::RGB, 60 /* 2s at 30Hz */}};
+    {DataStream::IMU, 20 /* 2s at 200Hz */},
+    {DataStream::LEFT_MONO, 1 /* 2s at 30Hz */},
+    {DataStream::RIGHT_MONO, 1 /* 2s at 30Hz */},
+    {DataStream::RGB, 1 /* 2s at 30Hz */}};
 
 // Config parameters with a reasonable initialization
 struct Config {

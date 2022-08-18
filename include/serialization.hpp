@@ -1,7 +1,9 @@
 #pragma once
 #include <fstream>
 #include <functional>
+#include <optional>
 #include <sstream>
+#include <stdexcept>
 
 #include "config.hpp"
 #include "logger_types.hpp"
@@ -12,23 +14,17 @@ namespace oakd_logger {
 
 class OAKDSerializer {
  public:
-  OAKDSerializer() {
-    std::vector<DataStream> all_types;
-    all_types.emplace_back(DataStream::IMU);
-    all_types.emplace_back(DataStream::LEFT_MONO);
-    all_types.emplace_back(DataStream::RIGHT_MONO);
-    all_types.emplace_back(DataStream::RGB);
+   OAKDSerializer() {
+     for (const auto &type : ALL_SENSOR_TYPES) {
+       num_packets_written_.insert({type, 0});
+       num_packets_read_.insert({type, 0});
+       const uint64_t hash =
+           Utilities::Misc::dirty_string_hash(magic_enum::enum_name(type));
 
-    for (const auto& type : all_types) {
-      num_packets_written_.insert({type, 0});
-      num_packets_read_.insert({type, 0});
-      const uint64_t hash =
-          Utilities::Misc::dirty_string_hash(magic_enum::enum_name(type));
-
-      DataStream_to_log_type_.insert({type, hash});
-      log_type_to_DataStream_.insert({hash, type});
-    }
-  }
+       DataStream_to_log_type_.insert({type, hash});
+       log_type_to_DataStream_.insert({hash, type});
+     }
+   }
 
   /**
    * @brief:    Prepare input stream
@@ -46,6 +42,12 @@ class OAKDSerializer {
     }
     return in_file_.is_open();
   }
+
+  /**
+   * @brief:    Check if ready to log output stream to a file
+   * @return:   True, if ready
+   */
+  bool ok_to_log() const { return out_file_.is_open(); }
 
   /**
    * @brief:    Prepare logging at a given output path
@@ -97,8 +99,8 @@ class OAKDSerializer {
   void write_camera_packet(const DataStream& type, const float timestamp,
                            const std::shared_ptr<dai::ImgFrame> packet) {
     if (!out_file_.is_open()) {
-      LOG(ERROR) << "Write file is not open while writing camera packet.";
-      return;
+      throw std::runtime_error(
+          "Write file is not open while writing camera packet.");
     }
 
     // Write type
@@ -111,10 +113,13 @@ class OAKDSerializer {
                     sizeof timestamp);
 
     // Write width and height
-    const auto& cv_mat = packet->getCvFrame();
+    const auto cv_mat = packet->getCvFrame();
+    const int sequence_num = packet->getSequenceNum();
     const int nrows = cv_mat.rows;
     const int ncols = cv_mat.cols;
     const int image_type = cv_mat.type();
+    out_file_.write(reinterpret_cast<const char *>(&sequence_num),
+                    sizeof sequence_num);
     out_file_.write(reinterpret_cast<const char*>(&nrows), sizeof nrows);
     out_file_.write(reinterpret_cast<const char*>(&ncols), sizeof ncols);
     out_file_.write(reinterpret_cast<const char*>(&image_type),
@@ -129,11 +134,14 @@ class OAKDSerializer {
 
   /**
    * @brief:    Read input stream
-   * @return:   True, if success
+   * @param[in] imu_packet: IMU packet
+   * @param[in] cam_packet: Camera packet
+   * @return:   DataStream type if read is successfull
    */
-  bool read_input_stream() {
-    if (!in_file_.is_open()) {
-      return false;
+  std::optional<DataStream> read_input_stream(IMUPacket &imu_packet,
+                                              CameraPacket &cam_packet) {
+    if (!in_file_.is_open() || in_file_.peek() == EOF) {
+      return std::nullopt;
     }
 
     size_t type_hash;
@@ -145,28 +153,27 @@ class OAKDSerializer {
                                 ? log_type_to_DataStream_.at(type_hash)
                                 : DataStream::INVALID;
 
-    IMUPacket imu_packet;
-    cv::Mat image;
     if (type == DataStream::IMU) {
       in_file_.read(reinterpret_cast<char*>(&imu_packet), sizeof imu_packet);
-    } else if (type != DataStream::INVALID) {
+    } else if (image_type(type)) {
       float timestamp = MAX_FLOAT;
-      int nrows = 0;
-      int ncols = 0;
-      int img_type = 0;
+      int sequence_num = -1;
+      int nrows = -1;
+      int ncols = -1;
+      int img_type = -1;
 
       // Read image dims
       in_file_.read(reinterpret_cast<char*>(&timestamp), sizeof timestamp);
+      in_file_.read(reinterpret_cast<char *>(&sequence_num),
+                    sizeof sequence_num);
       in_file_.read(reinterpret_cast<char*>(&nrows), sizeof nrows);
       in_file_.read(reinterpret_cast<char*>(&ncols), sizeof ncols);
       in_file_.read(reinterpret_cast<char*>(&img_type), sizeof img_type);
 
-      CameraPacket cam_packet(nrows, ncols, img_type);
-      cv::Mat& image = cam_packet.image;
-
-      const size_t nbytes = image.total() * image.elemSize();
-      in_file_.read(reinterpret_cast<char*>(image.ptr()), nbytes);
-
+      cv::Mat img(nrows, ncols, img_type);
+      const size_t nbytes = img.total() * img.elemSize();
+      in_file_.read(reinterpret_cast<char *>(img.ptr()), nbytes);
+      cam_packet = CameraPacket(type, timestamp, sequence_num, img);
     } else {
       std::cout << "Got an INVALID packet hash: " << type_hash << std::endl;
     }
@@ -174,9 +181,10 @@ class OAKDSerializer {
     // Record read packets
     if (type != DataStream::INVALID) {
       num_packets_read_.at(type) += 1;
+      return type;
     }
 
-    return in_file_.peek() != EOF;
+    return std::nullopt;
   }
 
   /**

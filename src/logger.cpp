@@ -32,7 +32,8 @@ bool DataQueues::add(dai::Device* device, const DataStream& type) {
   return true;
 }
 
-bool DataQueues::log_queue(OAKDSerializer& serializer) {
+bool DataQueues::log_queue(OAKDSerializer &serializer, OAKDPreviewer *preview,
+                           int &key) {
   IMUQueue imu_packet_queue;
   IMGVector collated_img_vector;
   for (const auto& [type, queue] : queues_) {
@@ -69,7 +70,7 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
 
   // Go over imu_packet_queue and img_queue
   dai::IMUPacket next_imu_packet;
-  std::shared_ptr<dai::ImgFrame> next_img_frame_ptr = nullptr;
+  std::shared_ptr<dai::ImgFrame> next_img_frame_ptr;
 
   auto next_type = get_next(imu_packet_queue, img_queue, next_imu_packet,
                             next_img_frame_ptr);
@@ -86,7 +87,14 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
       sequence_num = next_imu_packet.acceleroMeter.sequence;
 
       // Write next_imu_packet if possible
-      serializer.write_imu_packet(time_cast(next_timestamp), next_imu_packet);
+      if (serializer.ok_to_log()) {
+        serializer.write_imu_packet(time_cast(next_timestamp), next_imu_packet);
+      }
+
+      // If preview, then update
+      if (preview) {
+        preview->update_imu(time_cast(next_timestamp));
+      }
     } else {
       next_timestamp = next_img_frame_ptr->getTimestamp();
 
@@ -97,8 +105,25 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
       sequence_num = next_img_frame_ptr->getSequenceNum();
 
       // Write num_cam_packet if possible
-      serializer.write_camera_packet(*next_type, time_cast(next_timestamp),
-                                     next_img_frame_ptr);
+      if (serializer.ok_to_log()) {
+        serializer.write_camera_packet(*next_type, time_cast(next_timestamp),
+                                       next_img_frame_ptr);
+      } else {
+        LOG_EVERY_N(WARNING, 10)
+            << "Not logging any data since serializer is not ready to log.";
+      }
+
+      // If preview, then update
+      if (preview) {
+        CameraPacket cam_packet(*next_type, time_cast(next_timestamp),
+                                next_img_frame_ptr->getSequenceNum(),
+                                next_img_frame_ptr->getCvFrame());
+
+        preview->update_image(cam_packet);
+
+        cv::imshow("Preview", *(preview->preview_img()));
+        key = cv::waitKey(1);
+      }
     }
 
     LOG(INFO) << "Writing " << magic_enum::enum_name(*next_type)
@@ -111,7 +136,6 @@ bool DataQueues::log_queue(OAKDSerializer& serializer) {
     next_type = get_next(imu_packet_queue, img_queue, next_imu_packet,
                          next_img_frame_ptr);
   }
-
   return true;
 }
 
@@ -179,7 +203,8 @@ bool Logger::initialize() {
   const bool rgb_mono_success = configure_and_add_rgb_camera();
 
   // Add pipeline to device
-  device_ = std::make_unique<dai::Device>(*pipeline_, dai::UsbSpeed::SUPER);
+  device_ =
+      std::make_unique<dai::Device>(*pipeline_, dai::UsbSpeed::SUPER_PLUS);
 
   // Populate IMU queue
   if (imu_success) {
@@ -226,29 +251,46 @@ void Logger::start_logging() {
   }
   LOG(INFO) << "Logging duration " << config_.logging_duration_s << "s.";
 
-  while (true) {
-    data_queues_.log_queue(serializer_);
-
-    if (data_queues_.log_duration_s() > config_.logging_duration_s) {
-      break;
-    }
+  int key = 0;
+  while (key != 'q' &&
+         data_queues_.log_duration_s() < config_.logging_duration_s) {
+    data_queues_.log_queue(serializer_, &preview_, key);
   }
 
-  LOG(INFO) << "Finished logging after " << data_queues_.log_duration_s()
-            << " s. ";
+  LOG(ERROR) << "Finished logging after " << data_queues_.log_duration_s()
+             << " s. with key == 'q': " << (key == 'q');
   LOG(ERROR) << serializer_.output_file_info();
 }
 
 void Logger::replay(std::string_view input_file) {
-  bool input_stream_success = serializer_.prepare_input_stream(input_file);
-
-  LOG(INFO) << "Read from file " << input_file
-            << ", success: " << input_stream_success << std::endl;
-
-  bool done_parsing = input_stream_success;
-  while (done_parsing) {
-    done_parsing = serializer_.read_input_stream();
+  if (!serializer_.prepare_input_stream(input_file)) {
+    LOG(ERROR) << "Error reading from file " << input_file;
+    return;
   }
+
+  LOG(INFO) << "Read from file " << input_file << ", success. ";
+
+  std::optional<DataStream> type = std::nullopt;
+
+  IMUPacket imu_packet;
+  CameraPacket cam_packet;
+
+  int key = 0;
+  do {
+    type = serializer_.read_input_stream(imu_packet, cam_packet);
+
+    // Update preview
+    if (type) {
+      if (*type == DataStream::IMU) {
+        preview_.update_imu(imu_packet.timestamp);
+      } else if (image_type(*type)) {
+        preview_.update_image(cam_packet);
+
+        cv::imshow("Preview", *preview_.preview_img());
+        key = cv::waitKey(1);
+      }
+    }
+  } while (type && key != 'q');
 
   LOG(INFO) << "Finished replay.";
   LOG(ERROR) << serializer_.input_file_info();

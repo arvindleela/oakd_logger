@@ -33,16 +33,16 @@ class DataQueues {
    */
   bool add(dai::Device* device, const DataStream& type);
 
-  bool log_queue(OAKDSerializer& serializer);
+  bool log_queue(OAKDSerializer &serializer, OAKDPreviewer *preview, int &key);
 
   double log_duration_s() const;
 
- private:
+  double time_cast(const TimePoint &time) const;
+
+private:
   std::optional<DataStream> get_next(
       IMUQueue& imu_queue, IMGQueue& img_queue, dai::IMUPacket& next_imu_packet,
       std::shared_ptr<dai::ImgFrame>& next_img_frame_ptr) const;
-
-  double time_cast(const TimePoint& time) const;
 
   std::unordered_map<DataStream, QueueTypePtr, DataStreamHash> queues_;
 
@@ -95,7 +95,7 @@ class Logger {
   bool configure_and_add_rgb_camera();
 
   OAKDSerializer serializer_;
-  // OAKDPreviewer preview_;
+  OAKDPreviewer preview_;
 
   // Logger configuration
   Config config_;

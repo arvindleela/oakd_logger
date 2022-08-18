@@ -3,6 +3,7 @@
 #include <unordered_map>
 
 #include "basic_types.hpp"
+#include "magic_enum.hpp"
 
 namespace oakd_logger {
 
@@ -19,6 +20,26 @@ enum class DataStream : size_t {
   RGB,
   INVALID,
 };
+
+/**
+ * @brief:  Return true if type is an image
+ */
+inline bool image_type(const DataStream &type) {
+  return (type == DataStream::LEFT_MONO || type == DataStream::RIGHT_MONO ||
+          type == DataStream::RGB);
+}
+
+/**
+ * @brief:  Return true if type is a mono image
+ */
+inline bool mono_image_type(const DataStream &type) {
+  return (type == DataStream::LEFT_MONO || type == DataStream::RIGHT_MONO);
+}
+
+// Define all valid sensors
+constexpr std::array<DataStream, 4> ALL_SENSOR_TYPES = {
+    DataStream::IMU, DataStream::LEFT_MONO, DataStream::RIGHT_MONO,
+    DataStream::RGB};
 
 struct DataStreamHash {
   template <typename T>
@@ -70,12 +91,18 @@ struct IMUPacket
 };
 
 struct CameraPacket {
-  CameraPacket() : timestamp{MAX_FLOAT} {}
+  CameraPacket()
+      : type(DataStream::INVALID), timestamp{MAX_FLOAT}, sequence_num(MAX_INT) {
+  }
 
-  CameraPacket(int nrows, int ncols, int type)
-      : timestamp{MAX_FLOAT}, image{cv::Mat(nrows, ncols, type)} {}
+  CameraPacket(DataStream packet_type, float timestamp, int sequence_num,
+               const cv::Mat &image)
+      : type{packet_type}, timestamp{timestamp},
+        sequence_num{sequence_num}, image{image} {}
 
+  DataStream type;
   float timestamp;
+  int sequence_num;
   cv::Mat image;
 };
 
