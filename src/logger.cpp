@@ -6,6 +6,42 @@
 
 namespace oakd_logger {
 
+SensorPacketStatistics::SensorPacketStatistics(const double timestamp,
+                                               const size_t sequence_num)
+    : last_timestamp(timestamp), last_sequence_num(sequence_num) {}
+
+void SensorPacketStatistics::update(const double timestamp,
+                                    const size_t sequence_num) {
+  delta_timestamps.push(timestamp - last_timestamp);
+  delta_sequence_num.push(
+      (sequence_num - last_sequence_num + MAX_SEQUENCE_NUM) % MAX_SEQUENCE_NUM);
+
+  last_timestamp = timestamp;
+  last_sequence_num = sequence_num;
+}
+
+void SensorPacketStatistics::statistics(double& max_dt, size_t& max_ds) {
+  max_dt = 0;
+  max_ds = 0;
+  if (size() == 0) {
+    LOG(ERROR) << "Delta timestamps and delta sequence numbers are empty.";
+    return;
+  }
+
+  max_dt = *std::max_element(delta_timestamps.begin(), delta_timestamps.end());
+  max_ds =
+      *std::max_element(delta_sequence_num.begin(), delta_sequence_num.end());
+}
+
+void SensorPacketStatistics::info(std::string_view type) {
+  double max_dt = -1;
+  size_t max_ds = -1;
+
+  statistics(max_dt, max_ds);
+  std::cout << "Statistics of " << type << ", max_dt: " << max_dt
+            << ", max_ds: " << max_ds << std::endl;
+}
+
 double DataQueues::time_cast(const TimePoint& time) const {
   static constexpr bool VERBOSE = false;
   if (!start_ts_) {
@@ -95,6 +131,7 @@ bool DataQueues::log_queue(OAKDSerializer &serializer, OAKDPreviewer *preview,
       if (preview) {
         preview->update_imu(time_cast(next_timestamp));
       }
+
     } else {
       next_timestamp = next_img_frame_ptr->getTimestamp();
 
@@ -283,8 +320,12 @@ void Logger::replay(std::string_view input_file) {
     if (type) {
       if (*type == DataStream::IMU) {
         preview_.update_imu(imu_packet.timestamp);
+        update_packet_statistics(*type, imu_packet.timestamp,
+                                 imu_packet.sequence_num());
       } else if (image_type(*type)) {
         preview_.update_image(cam_packet);
+        update_packet_statistics(*type, cam_packet.timestamp,
+                                 cam_packet.sequence_num);
 
         cv::imshow("Preview", *preview_.preview_img());
         key = cv::waitKey(1);
@@ -410,6 +451,17 @@ bool Logger::configure_and_add_rgb_camera() {
   camera_node->preview.link(link_camera_out->input);
 
   return true;
+}
+
+void Logger::update_packet_statistics(const DataStream& type,
+                                      const double timestamp,
+                                      const size_t sequence_num) {
+  if (statistics_.find(type) == statistics_.end()) {
+    // Instantiate SensorPacketStatstics
+    statistics_.insert({type, SensorPacketStatistics(timestamp, sequence_num)});
+  } else {
+    statistics_.at(type).update(timestamp, sequence_num);
+  }
 }
 
 }  // namespace oakd_logger

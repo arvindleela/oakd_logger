@@ -88,6 +88,8 @@ struct IMUPacket
       : timestamp(_timestamp),
         accelerometer{packet.acceleroMeter},
         gyroscope{packet.gyroscope} {}
+
+  int sequence_num() const { return accelerometer.sequence_num; }
 };
 
 struct CameraPacket {
