@@ -48,8 +48,7 @@ struct DataStreamHash {
   }
 };
 
-static const std::unordered_set<DataStream> MONO_CAMERAS(
-    {DataStream::LEFT_MONO, DataStream::RIGHT_MONO});
+// Define CameraBoardSockets for each type
 static const std::unordered_map<DataStream, dai::CameraBoardSocket>
     CAMERA_SOCKET = {{DataStream::LEFT_MONO, dai::CameraBoardSocket::LEFT},
                      {DataStream::RIGHT_MONO, dai::CameraBoardSocket::RIGHT},

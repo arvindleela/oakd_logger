@@ -14,7 +14,7 @@ static constexpr size_t RGB_PREVIEW_COLS = 1280;
 
 // Define buffer sizes
 static const std::unordered_map<DataStream, size_t> QUEUE_BUFFER_SIZE = {
-    {DataStream::IMU, 20 /* 2s at 200Hz */},
+    {DataStream::IMU, 100 /* 1s at 100Hz */},
     {DataStream::LEFT_MONO, 1 /* 2s at 30Hz */},
     {DataStream::RIGHT_MONO, 1 /* 2s at 30Hz */},
     {DataStream::RGB, 1 /* 2s at 30Hz */}};
@@ -35,8 +35,8 @@ struct Config {
   // Pipeline config
   std::unordered_map<DataStream, bool, DataStreamHash> disable_stream = {
       {DataStream::IMU, false},
-      {DataStream::LEFT_MONO, false},
-      {DataStream::RIGHT_MONO, false},
+      {DataStream::LEFT_MONO, true},
+      {DataStream::RIGHT_MONO, true},
       {DataStream::RGB, false}};
 
   // IMU config
