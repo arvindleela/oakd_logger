@@ -13,42 +13,6 @@
 namespace oakd_logger {
 
 using QueueTypePtr = std::shared_ptr<dai::DataOutputQueue>;
-using IMUQueue = std::queue<dai::IMUPacket>;
-
-struct StereoImg {
-  DataStream type;
-  std::shared_ptr<dai::ImgFrame> img_frame;
-};
-
-using IMGQueue = std::queue<StereoImg>;
-using IMGVector = std::vector<StereoImg>;
-
-class DataQueues {
- public:
-  /**
-   * @brief:    Add sensor stream queue
-   * @param[in] device: Device
-   * @param[in] type:   Stream type
-   * @return:   True, if success
-   */
-  bool add(dai::Device* device, const DataStream& type);
-
-  bool log_queue(OAKDSerializer &serializer, OAKDPreviewer *preview, int &key);
-
-  double log_duration_s() const;
-
-  double time_cast(const TimePoint &time) const;
-
-private:
-  std::optional<DataStream> get_next(
-      IMUQueue& imu_queue, IMGQueue& img_queue, dai::IMUPacket& next_imu_packet,
-      std::shared_ptr<dai::ImgFrame>& next_img_frame_ptr) const;
-
-  std::unordered_map<DataStream, QueueTypePtr, DataStreamHash> queues_;
-
-  std::optional<TimePoint> start_ts_ = std::nullopt;
-  std::optional<TimePoint> last_timestamp_ = std::nullopt;
-};
 
 class Logger {
  public:
@@ -77,6 +41,13 @@ class Logger {
 
  private:
   /**
+   * @brief:    Add sensor stream queue
+   * @param[in] type:   Stream type
+   * @return:   True, if success
+   */
+  bool add_to_queue(const DataStream& type);
+
+  /**
    * @brief:    Configure IMU and add to pipeline
    * @return:   True, if success
    */
@@ -94,20 +65,53 @@ class Logger {
    */
   bool configure_and_add_rgb_camera();
 
+  /**
+   * @brief:    Log data that is accumulated in all queues
+   * @return:   Last sensor timestamp
+   */
+  std::optional<TimePoint> log_queues();
+
+  /**
+   * @brief:    Read cam packet
+   * @param[in] type:   Type of image, i.e MONO or RGB
+   * @param[in] packet: Pointer to unerlying ImgFrame
+   * @return:   Last cam timestamp
+   */
+  TimePoint read_cam_packet(const DataStream& type,
+                            const std::shared_ptr<dai::ImgFrame> packet);
+
+  /**
+   * @brief:    Read IMU packet
+   * @param[in] packet: IMU packet to be parsed
+   * @return    Last IMU timestamp
+   */
+  TimePoint read_imu_packet(const dai::IMUPacket& packet);
+
+  /**
+   * @brief:    Time since start
+   * @return:   Time since start
+   */
+  double time_since_start(const TimePoint& time) const;
+
+ private:
+  // Starting timestamp
+  std::optional<TimePoint> start_ts_ = std::nullopt;
+
+  // Device queues
+  std::unordered_map<DataStream, QueueTypePtr, DataStreamHash> queues_;
+
   OAKDSerializer serializer_;
+
   OAKDPreviewer preview_;
 
   // Logger configuration
   Config config_;
-
-  // Data queues
-  DataQueues data_queues_;
 
   // Sensor queue
   std::unique_ptr<dai::Pipeline> pipeline_ = nullptr;
   std::unique_ptr<dai::Device> device_ = nullptr;
 
   // Initialized
-  bool initialized_ = false;
+  bool device_initialized_ = false;
 };
 }  // namespace oakd_logger

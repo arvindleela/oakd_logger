@@ -6,175 +6,6 @@
 
 namespace oakd_logger {
 
-double DataQueues::time_cast(const TimePoint& time) const {
-  static constexpr bool VERBOSE = false;
-  if (!start_ts_) {
-    LOG_IF(INFO, VERBOSE) << "Start timestamp is not initialized";
-    return -1.0;
-  }
-  using namespace std::chrono;
-  return static_cast<double>(
-             duration_cast<nanoseconds>(time - *start_ts_).count()) *
-         1e-9;
-}
-
-bool DataQueues::add(dai::Device* device, const DataStream& type) {
-  if (!device) {
-    LOG(ERROR) << "Invalid device while adding data queue.";
-    return false;
-  }
-  queues_[type] = device->getOutputQueue(
-      std::string(magic_enum::enum_name(type)), QUEUE_BUFFER_SIZE.at(type),
-      /* blocking */ false);
-  LOG(INFO) << "Adding queue of type : " << magic_enum::enum_name(type)
-            << ", valid: " << (queues_[type] != nullptr)
-            << ", of size: " << QUEUE_BUFFER_SIZE.at(type);
-  return true;
-}
-
-bool DataQueues::log_queue(OAKDSerializer &serializer, OAKDPreviewer *preview,
-                           int &key) {
-  IMUQueue imu_packet_queue;
-  IMGVector collated_img_vector;
-  for (const auto& [type, queue] : queues_) {
-    switch (type) {
-      case DataStream::IMU: {
-        const auto IMUData_queue = queue->tryGetAll<dai::IMUData>();
-        for (const auto& imu_data : IMUData_queue) {
-          for (const auto& imu_packet : imu_data->packets) {
-            imu_packet_queue.push(imu_packet);
-          }
-        }
-        break;
-      }
-      default: {
-        // All other types are images
-        const auto ImgData_queue = queue->tryGetAll<dai::ImgFrame>();
-        for (const auto& img : ImgData_queue) {
-          collated_img_vector.push_back({.type = type, .img_frame = img});
-        }
-      }
-    }
-  }
-
-  // Sort collated_image_vector
-  std::sort(collated_img_vector.begin(), collated_img_vector.end(),
-            [](const auto& a, const auto& b) {
-              return a.img_frame->getTimestamp() < b.img_frame->getTimestamp();
-            });
-
-  IMGQueue img_queue;
-  for (const auto& img : collated_img_vector) {
-    img_queue.push(img);
-  }
-
-  // Go over imu_packet_queue and img_queue
-  dai::IMUPacket next_imu_packet;
-  std::shared_ptr<dai::ImgFrame> next_img_frame_ptr;
-
-  auto next_type = get_next(imu_packet_queue, img_queue, next_imu_packet,
-                            next_img_frame_ptr);
-  TimePoint next_timestamp = TimePoint::max();
-  while (next_type != std::nullopt) {
-    int sequence_num = -1;
-    if (*next_type == DataStream::IMU) {
-      next_timestamp = next_imu_packet.acceleroMeter.timestamp.get();
-
-      if (!start_ts_) {
-        start_ts_ = next_timestamp;
-      }
-
-      sequence_num = next_imu_packet.acceleroMeter.sequence;
-
-      // Write next_imu_packet if possible
-      if (serializer.ok_to_log()) {
-        serializer.write_imu_packet(time_cast(next_timestamp), next_imu_packet);
-      }
-
-      // If preview, then update
-      if (preview) {
-        preview->update_imu(time_cast(next_timestamp));
-      }
-    } else {
-      next_timestamp = next_img_frame_ptr->getTimestamp();
-
-      if (!start_ts_) {
-        start_ts_ = next_timestamp;
-      }
-
-      sequence_num = next_img_frame_ptr->getSequenceNum();
-
-      // Write num_cam_packet if possible
-      if (serializer.ok_to_log()) {
-        serializer.write_camera_packet(*next_type, time_cast(next_timestamp),
-                                       next_img_frame_ptr);
-      } else {
-        LOG_EVERY_N(WARNING, 10)
-            << "Not logging any data since serializer is not ready to log.";
-      }
-
-      // If preview, then update
-      if (preview) {
-        CameraPacket cam_packet(*next_type, time_cast(next_timestamp),
-                                next_img_frame_ptr->getSequenceNum(),
-                                next_img_frame_ptr->getCvFrame());
-
-        preview->update_image(cam_packet);
-
-        cv::imshow("Preview", *(preview->preview_img()));
-        key = cv::waitKey(1);
-      }
-    }
-
-    LOG(INFO) << "Writing " << magic_enum::enum_name(*next_type)
-              << " with ts: " << time_cast(next_timestamp)
-              << ", sequence num: " << sequence_num << std::endl;
-
-    *last_timestamp_ = next_timestamp;
-
-    // Get the next chronologically ordered sensor
-    next_type = get_next(imu_packet_queue, img_queue, next_imu_packet,
-                         next_img_frame_ptr);
-  }
-  return true;
-}
-
-double DataQueues::log_duration_s() const {
-  return time_cast(*last_timestamp_);
-}
-
-std::optional<DataStream> DataQueues::get_next(
-    IMUQueue& imu_queue, IMGQueue& img_queue, dai::IMUPacket& next_imu_packet,
-    std::shared_ptr<dai::ImgFrame>& next_img_frame_ptr) const {
-  // If there is no data, then early exit
-  if (imu_queue.empty() && img_queue.empty()) {
-    return std::nullopt;
-  }
-
-  // Note that Gyroscope and Accelerometer are synchronized
-  const TimePoint imu_time =
-      imu_queue.empty() ? TimePoint::max()
-                        : imu_queue.front().acceleroMeter.timestamp.get();
-  const TimePoint img_time = img_queue.empty()
-                                 ? TimePoint::max()
-                                 : img_queue.front().img_frame->getTimestamp();
-  const auto img_type =
-      img_queue.empty() ? DataStream::INVALID : img_queue.front().type;
-
-  auto ret_type = DataStream::INVALID;
-
-  if (imu_time < img_time) {
-    ret_type = DataStream::IMU;
-    next_imu_packet = imu_queue.front();
-    imu_queue.pop();
-  } else {
-    ret_type = img_type;
-    next_img_frame_ptr = img_queue.front().img_frame;
-    img_queue.pop();
-  };
-  return ret_type;
-}
-
 Logger::Logger(const std::string_view logdir, const Config& config)
     : config_(config) {
   google::InitGoogleLogging("OAK-D Logger");
@@ -208,25 +39,25 @@ bool Logger::initialize() {
 
   // Populate IMU queue
   if (imu_success) {
-    if (!data_queues_.add(device_.get(), DataStream::IMU)) {
+    if (!add_to_queue(DataStream::IMU)) {
       LOG(ERROR) << "Error adding IMU data queue.";
     }
   }
 
   if (left_mono_success) {
-    if (!data_queues_.add(device_.get(), DataStream::LEFT_MONO)) {
+    if (!add_to_queue(DataStream::LEFT_MONO)) {
       LOG(ERROR) << "Error adding LEFT MONO data queue.";
     }
   }
 
   if (right_mono_success) {
-    if (!data_queues_.add(device_.get(), DataStream::RIGHT_MONO)) {
+    if (!add_to_queue(DataStream::RIGHT_MONO)) {
       LOG(ERROR) << "Error adding RIGHT MONO data queue.";
     }
   }
 
   if (rgb_mono_success) {
-    if (!data_queues_.add(device_.get(), DataStream::RGB)) {
+    if (!add_to_queue(DataStream::RGB)) {
       LOG(ERROR) << "Error adding RGB data queue.";
     }
   }
@@ -234,14 +65,69 @@ bool Logger::initialize() {
   std::cout << "Initialized " << pipeline_->getAllNodes().size() << " nodes. "
             << std::endl;
 
-  initialized_ = true;
+  device_initialized_ = true;
   return true;
+}
+
+std::optional<TimePoint> Logger::log_queues() {
+  std::optional<TimePoint> last_timestamp = std::nullopt;
+  for (const auto& [type, queue] : queues_) {
+    if (type == DataStream::IMU) {
+      const auto IMUData_queue = queue->tryGetAll<dai::IMUData>();
+      for (const auto& imu_data : IMUData_queue) {
+        for (const auto& imu_packet : imu_data->packets) {
+          last_timestamp = read_imu_packet(imu_packet);
+        }
+      }
+    } else if (image_type(type)) {
+      // All other types are images
+      const auto ImgData_queue = queue->tryGetAll<dai::ImgFrame>();
+      for (const auto& cam_packet : ImgData_queue) {
+        last_timestamp = read_cam_packet(type, cam_packet);
+      }
+    }
+  }
+  return last_timestamp;
+}
+
+TimePoint Logger::read_imu_packet(const dai::IMUPacket& packet) {
+  const auto timestamp = packet.acceleroMeter.timestamp.get();
+
+  // Write IMU packet if needed
+  if (serializer_.ok_to_log()) {
+    serializer_.write_imu_packet(time_since_start(timestamp), packet);
+  }
+
+  // Preview if needed
+  preview_.update_imu(time_since_start(timestamp));
+
+  return timestamp;
+}
+
+TimePoint Logger::read_cam_packet(const DataStream& type,
+                                  const std::shared_ptr<dai::ImgFrame> packet) {
+  const auto timestamp = packet->getTimestamp();
+
+  // Write num_cam_packet if needed
+  if (serializer_.ok_to_log()) {
+    serializer_.write_camera_packet(type, time_since_start(timestamp), packet);
+  } else {
+    LOG_EVERY_N(WARNING, 10)
+        << "Not logging any data since serializer is not ready to log.";
+  }
+
+  CameraPacket cam_packet(type, time_since_start(timestamp),
+                          packet->getSequenceNum(), packet->getCvFrame());
+
+  preview_.update_image(cam_packet);
+
+  return timestamp;
 }
 
 void Logger::start_logging() {
   // Early exit if not initialized
-  if (!initialized_) {
-    LOG(ERROR) << "Start logging without initializing logger";
+  if (!device_initialized_) {
+    LOG(ERROR) << "Start logging without initializing device.";
     return;
   }
 
@@ -252,12 +138,20 @@ void Logger::start_logging() {
   LOG(INFO) << "Logging duration " << config_.logging_duration_s << "s.";
 
   int key = 0;
-  while (key != 'q' &&
-         data_queues_.log_duration_s() < config_.logging_duration_s) {
-    data_queues_.log_queue(serializer_, &preview_, key);
+  TimePoint last_sensor_timestamp{};
+  while (key != 'q') {
+    const auto last_sensor_timestamp = log_queues();
+    if (last_sensor_timestamp) {
+      if (!start_ts_) {
+        start_ts_ = last_sensor_timestamp;
+      }
+      cv::imshow("Preview", *(preview_.preview_img()));
+      key = cv::waitKey(1);
+    }
   }
 
-  LOG(ERROR) << "Finished logging after " << data_queues_.log_duration_s()
+  LOG(ERROR) << "Finished logging after "
+             << time_since_start(last_sensor_timestamp)
              << " s. with key == 'q': " << (key == 'q');
   LOG(ERROR) << serializer_.output_file_info();
 }
@@ -338,7 +232,7 @@ bool Logger::configure_and_add_imu() {
 }
 
 bool Logger::configure_and_add_mono_camera(const DataStream& type) {
-  if (MONO_CAMERAS.find(type) == MONO_CAMERAS.end()) {
+  if (!mono_image_type(type)) {
     LOG(ERROR) << "Type " << magic_enum::enum_name(type)
                << " is not a mono camera.";
     return false;
@@ -410,6 +304,28 @@ bool Logger::configure_and_add_rgb_camera() {
   camera_node->preview.link(link_camera_out->input);
 
   return true;
+}
+
+bool Logger::add_to_queue(const DataStream& type) {
+  queues_[type] = device_.get()->getOutputQueue(
+      std::string(magic_enum::enum_name(type)), QUEUE_BUFFER_SIZE.at(type),
+      /* blocking */ false);
+  LOG(INFO) << "Adding queue of type : " << magic_enum::enum_name(type)
+            << ", valid: " << (queues_[type] != nullptr)
+            << ", of size: " << QUEUE_BUFFER_SIZE.at(type);
+  return true;
+}
+
+double Logger::time_since_start(const TimePoint& time) const {
+  static constexpr bool VERBOSE = false;
+  if (!start_ts_) {
+    LOG_IF(INFO, VERBOSE) << "Start timestamp is not initialized";
+    return -1.0;
+  }
+  using namespace std::chrono;
+  return static_cast<double>(
+             duration_cast<nanoseconds>(time - *start_ts_).count()) *
+         1e-9;
 }
 
 }  // namespace oakd_logger
