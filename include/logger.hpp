@@ -7,6 +7,7 @@
 
 #include "config.hpp"
 #include "logger_types.hpp"
+#include "packet_statistics.hpp"
 #include "preview.hpp"
 #include "serialization.hpp"
 
@@ -93,14 +94,25 @@ class Logger {
    */
   double time_since_start(const TimePoint& time) const;
 
+  /**
+   * @brief:    Proces keyboard input
+   */
+  void process_key(const int key);
+
  private:
   // Starting timestamp
   std::optional<TimePoint> start_ts_ = std::nullopt;
 
   // Device queues
   std::unordered_map<DataStream, QueueTypePtr, DataStreamHash> queues_;
+  std::shared_ptr<IMUStat> imu_stat_;
+  std::unordered_map<DataStream, std::shared_ptr<CAMStat>> cam_stats_;
 
   OAKDSerializer serializer_;
+
+  // Some actions
+  bool record_ = false;
+  bool quit_ = false;
 
   OAKDPreviewer preview_;
 
