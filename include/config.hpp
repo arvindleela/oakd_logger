@@ -45,8 +45,5 @@ struct Config {
   // IMU config
   size_t imu_batch_report_threshold = 20;
   size_t imu_max_batch_reports = 20;
-
-  // Duration of logging
-  float logging_duration_s = 1.0;
 };
 }  // namespace oakd_logger
