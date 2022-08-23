@@ -15,7 +15,6 @@ def parse_args():
     parser.add_argument('logdir', help='Path where logs are written', type=str)
     parser.add_argument('--output', help='Output binary file name', type=str, default=None)
     parser.add_argument('--input', help='Input binary file name. If specified replay file', type=str, default=None)
-    parser.add_argument('--duration', help='Duration of logging, s', type=float, default=1e6)
     return parser.parse_args()
 
 def main():

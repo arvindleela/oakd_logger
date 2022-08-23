@@ -158,7 +158,6 @@ void Logger::start_logging() {
   for (const auto& qn : device_->getOutputQueueNames()) {
     LOG(INFO) << qn;
   }
-  LOG(INFO) << "Logging duration " << config_.logging_duration_s << "s.";
 
   int key = 0;
   TimePoint last_sensor_timestamp{};
