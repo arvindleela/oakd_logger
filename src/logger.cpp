@@ -15,10 +15,15 @@ Logger::Logger(const std::string_view logdir, const Config& config)
 
   LOG(INFO) << "Instantiated logger ...";
 
-  const bool config_sanity_check_passed = config.sanity_check();
-  if (!config_sanity_check_passed) {
-    LOG(ERROR) << "Config sanity checks failed.";
-    return;
+  // Prepare statistics
+  imu_stat_ = std::make_shared<IMUStat>(MIN_IMU_DT_S, MAX_IMU_DT_S);
+
+  for (const auto& type : ALL_SENSOR_TYPES) {
+    if (!image_type(type)) {
+      continue;
+    }
+    cam_stats_.insert(
+        {type, std::make_shared<CAMStat>(MIN_CAM_DT_S, MAX_CAM_DT_S)});
   }
 }
 
@@ -94,12 +99,16 @@ TimePoint Logger::read_imu_packet(const dai::IMUPacket& packet) {
   const auto timestamp = packet.acceleroMeter.timestamp.get();
 
   // Write IMU packet if needed
-  if (serializer_.ok_to_log()) {
+  if (record_ && serializer_.ok_to_log()) {
     serializer_.write_imu_packet(time_since_start(timestamp), packet);
   }
 
-  // Preview if needed
+  // Update preview
   preview_.update_imu(time_since_start(timestamp));
+
+  // Update sensor statistics
+  imu_stat_->update_statistics(packet.acceleroMeter.sequence,
+                               time_since_start(timestamp));
 
   return timestamp;
 }
@@ -109,7 +118,7 @@ TimePoint Logger::read_cam_packet(const DataStream& type,
   const auto timestamp = packet->getTimestamp();
 
   // Write num_cam_packet if needed
-  if (serializer_.ok_to_log()) {
+  if (record_ && serializer_.ok_to_log()) {
     serializer_.write_camera_packet(type, time_since_start(timestamp), packet);
   } else {
     LOG_EVERY_N(WARNING, 10)
@@ -119,9 +128,23 @@ TimePoint Logger::read_cam_packet(const DataStream& type,
   CameraPacket cam_packet(type, time_since_start(timestamp),
                           packet->getSequenceNum(), packet->getCvFrame());
 
-  preview_.update_image(cam_packet);
+  // Update preview
+  preview_.update_image(cam_packet, imu_stat_, cam_stats_, record_);
 
+  // Update sensor statistics
+  cam_stats_.at(type)->update_statistics(packet->getSequenceNum(),
+                                         time_since_start(timestamp));
   return timestamp;
+}
+
+void Logger::process_key(const int key) {
+  if (key == 'q') {
+    quit_ = true;
+  }
+
+  if (key == 'r') {
+    record_ = !record_;
+  }
 }
 
 void Logger::start_logging() {
@@ -139,14 +162,14 @@ void Logger::start_logging() {
 
   int key = 0;
   TimePoint last_sensor_timestamp{};
-  while (key != 'q') {
+  while (!quit_) {
     const auto last_sensor_timestamp = log_queues();
     if (last_sensor_timestamp) {
       if (!start_ts_) {
         start_ts_ = last_sensor_timestamp;
       }
       cv::imshow("Preview", *(preview_.preview_img()));
-      key = cv::waitKey(1);
+      process_key(cv::waitKey(10));
     }
   }
 
@@ -176,9 +199,18 @@ void Logger::replay(std::string_view input_file) {
     // Update preview
     if (type) {
       if (*type == DataStream::IMU) {
+        // Update sensor statistics
+        imu_stat_->update_statistics(imu_packet.accelerometer.sequence_num,
+                                     imu_packet.timestamp);
+
         preview_.update_imu(imu_packet.timestamp);
       } else if (image_type(*type)) {
-        preview_.update_image(cam_packet);
+        // Update sensor statistics
+        cam_stats_.at(*type)->update_statistics(cam_packet.sequence_num,
+                                                cam_packet.timestamp);
+
+        preview_.update_image(cam_packet, imu_stat_, cam_stats_,
+                              /* record */ false);
 
         cv::imshow("Preview", *preview_.preview_img());
         key = cv::waitKey(1);
@@ -218,13 +250,13 @@ bool Logger::configure_and_add_imu() {
   // Generate synced IMU measurements at SYNCED_IMU_FREQUENCY_HZ
   imu_node->enableIMUSensor(
       {dai::IMUSensor::ACCELEROMETER_RAW, dai::IMUSensor::GYROSCOPE_RAW},
-      config_.imu_update_rate_hz);
+      IMU_UPDATE_RATE_HZ);
 
   imu_node->setBatchReportThreshold(config_.imu_batch_report_threshold);
   imu_node->setMaxBatchReports(config_.imu_max_batch_reports);
 
   LOG(INFO) << "Successfully instantiated IMU node with update_rate_hz: "
-            << config_.imu_update_rate_hz << ", batch report threshold: "
+            << IMU_UPDATE_RATE_HZ << ", batch report threshold: "
             << imu_node->getBatchReportThreshold()
             << ", max_batch_reports: " << imu_node->getMaxBatchReports();
 
@@ -260,6 +292,7 @@ bool Logger::configure_and_add_mono_camera(const DataStream& type) {
   camera_node->setBoardSocket(CAMERA_SOCKET.at(type));
   camera_node->setResolution(
       dai::MonoCameraProperties::SensorResolution::THE_720_P);
+  camera_node->setFps(CAM_FPS);
 
   auto link_camera_out = pipeline_->create<dai::node::XLinkOut>();
   link_camera_out->setStreamName(std::string(magic_enum::enum_name(type)));
@@ -292,6 +325,7 @@ bool Logger::configure_and_add_rgb_camera() {
   camera_node->setBoardSocket(CAMERA_SOCKET.at(DataStream::RGB));
   camera_node->setResolution(
       dai::ColorCameraProperties::SensorResolution::THE_1080_P);
+  camera_node->setFps(CAM_FPS);
   camera_node->setPreviewSize(RGB_PREVIEW_COLS, RGB_PREVIEW_ROWS);
   camera_node->setInterleaved(false);
   camera_node->setColorOrder(dai::ColorCameraProperties::ColorOrder::RGB);
