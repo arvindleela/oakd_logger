@@ -13,8 +13,8 @@ Tested on macbook pro with the following specs
 Software:
 System Version:	macOS 12.5.1 (21G83)
   Kernel Version:	Darwin 21.6.0
-  
-Hardware: 
+
+Hardware:
 Model Name:	MacBook Pro
   Model Identifier:	MacBookPro14,1
   Processor Name:	Dual-Core Intel Core i5
@@ -52,3 +52,10 @@ The `logger.py` file in the root directory is the main entry point. Use `python3
 
 ### To replay logs
 0. Run something like `python3 logger.py data/ --input calibration_target/data.bin` to replay data from a binary file stored from the previous step.
+
+#### Some linker errors
+If there are some linker errors like these
+```
+/usr/bin/ld: /home/mathieu/.hunter/_Base/062a19a/64dcd41/5051a8e/Install/lib/libspdlog.a(spdlog.cpp.o): relocation R_X86_64_TPOFF32 against `_ZGVZN6spdlog7details2os9thread_idEvE3tid' can not be used when making a shared object; recompile with -fPIC
+```
+consult the steps in `ubuntu_build.sh`. CAUTION: Running `ubuntu_build.sh` will nuke `~/.hunter` and the `build` directories.
