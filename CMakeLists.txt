@@ -23,30 +23,29 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Add executable
 set(SOURCES
-    src/logger.cpp
-    src/bindings.cpp)
+        src/logger.cpp
+        src/bindings.cpp)
 
 # Add Pybind
 pybind11_add_module(${PROJECT_NAME} ${SOURCES})
 
 include_directories(include
-                    pybind11/include
-                    utilities/magic_enum/include
-                    utilities/include
-                    )
+        pybind11/include
+        utilities/magic_enum/include
+        utilities/include
+        utilities/eigen
+        )
 
 # Link with libraries
 target_link_libraries(${PROJECT_NAME}
-    PUBLIC
-    depthai::opencv
-    ${OpenCV_LIBS} # optional, used for example
-    glog::glog
-    utilities
-    )
+        PUBLIC
+        depthai::opencv
+        ${OpenCV_LIBS}
+        glog::glog
+        utilities
+        )
 
 target_compile_options(${PROJECT_NAME} PUBLIC -fPIC)
 add_compile_options(-fPIC)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fpic")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpic")
-
-

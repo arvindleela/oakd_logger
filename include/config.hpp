@@ -17,8 +17,6 @@ static constexpr size_t IMU_STAT_BUFFER_SIZE =
 static constexpr size_t CAM_STAT_BUFFER_SIZE =
     STATISTICS_RECORD_TIME_S * CAM_FPS;
 
-static constexpr size_t RGB_PREVIEW_ROWS = 720;
-static constexpr size_t RGB_PREVIEW_COLS = 1280;
 
 // Some thresholds for packet statistics viz
 static constexpr double MIN_IMU_DT_S = 0.01;
