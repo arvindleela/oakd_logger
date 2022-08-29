@@ -7,9 +7,6 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/depthai-core EXCLUDE_FROM_ALL)
 
 project(OAKDLogger VERSION 0.1)
 
-# Add pybind
-add_subdirectory(pybind11)
-
 # Add glog
 add_subdirectory(glog)
 
