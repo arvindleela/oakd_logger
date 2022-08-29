@@ -36,6 +36,7 @@ include_directories(include
                     pybind11/include
                     utilities/magic_enum/include
                     utilities/include
+                    utilities/eigen
                     )
 
 # Link with libraries

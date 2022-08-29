@@ -6,7 +6,7 @@
 
 namespace oakd_logger {
 
-Logger::Logger(const std::string_view logdir, const Config& config)
+Logger::Logger(const std::string_view logdir, const Config &config)
     : config_(config) {
   google::InitGoogleLogging("OAK-D Logger");
 
@@ -18,7 +18,7 @@ Logger::Logger(const std::string_view logdir, const Config& config)
   // Prepare statistics
   imu_stat_ = std::make_shared<IMUStat>(MIN_IMU_DT_S, MAX_IMU_DT_S);
 
-  for (const auto& type : ALL_SENSOR_TYPES) {
+  for (const auto &type : ALL_SENSOR_TYPES) {
     if (!image_type(type)) {
       continue;
     }
@@ -76,18 +76,18 @@ bool Logger::initialize() {
 
 std::optional<TimePoint> Logger::log_queues() {
   std::optional<TimePoint> last_timestamp = std::nullopt;
-  for (const auto& [type, queue] : queues_) {
+  for (const auto &[type, queue] : queues_) {
     if (type == DataStream::IMU) {
       const auto IMUData_queue = queue->tryGetAll<dai::IMUData>();
-      for (const auto& imu_data : IMUData_queue) {
-        for (const auto& imu_packet : imu_data->packets) {
+      for (const auto &imu_data : IMUData_queue) {
+        for (const auto &imu_packet : imu_data->packets) {
           last_timestamp = read_imu_packet(imu_packet);
         }
       }
     } else if (image_type(type)) {
       // All other types are images
       const auto ImgData_queue = queue->tryGetAll<dai::ImgFrame>();
-      for (const auto& cam_packet : ImgData_queue) {
+      for (const auto &cam_packet : ImgData_queue) {
         last_timestamp = read_cam_packet(type, cam_packet);
       }
     }
@@ -95,7 +95,7 @@ std::optional<TimePoint> Logger::log_queues() {
   return last_timestamp;
 }
 
-TimePoint Logger::read_imu_packet(const dai::IMUPacket& packet) {
+TimePoint Logger::read_imu_packet(const dai::IMUPacket &packet) {
   const auto timestamp = packet.acceleroMeter.timestamp.get();
 
   // Write IMU packet if needed
@@ -113,7 +113,7 @@ TimePoint Logger::read_imu_packet(const dai::IMUPacket& packet) {
   return timestamp;
 }
 
-TimePoint Logger::read_cam_packet(const DataStream& type,
+TimePoint Logger::read_cam_packet(const DataStream &type,
                                   const std::shared_ptr<dai::ImgFrame> packet) {
   const auto timestamp = packet->getTimestamp();
 
@@ -155,7 +155,7 @@ void Logger::start_logging() {
   }
 
   LOG(INFO) << "Queue size: " << device_->getOutputQueueNames().size();
-  for (const auto& qn : device_->getOutputQueueNames()) {
+  for (const auto &qn : device_->getOutputQueueNames()) {
     LOG(INFO) << qn;
   }
 
@@ -221,6 +221,13 @@ void Logger::replay(std::string_view input_file) {
   LOG(ERROR) << serializer_.input_file_info();
 }
 
+std::string Logger::sequential_read(
+    std::string_view input_file,
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> &mat) {
+  mat.fill(10);
+  return "CAM";
+}
+
 bool Logger::configure_and_add_imu() {
   if (config_.disable_stream.at(DataStream::IMU)) {
     LOG(ERROR) << "IMU is disabled by config.";
@@ -262,7 +269,7 @@ bool Logger::configure_and_add_imu() {
   return true;
 }
 
-bool Logger::configure_and_add_mono_camera(const DataStream& type) {
+bool Logger::configure_and_add_mono_camera(const DataStream &type) {
   if (!mono_image_type(type)) {
     LOG(ERROR) << "Type " << magic_enum::enum_name(type)
                << " is not a mono camera.";
@@ -339,7 +346,7 @@ bool Logger::configure_and_add_rgb_camera() {
   return true;
 }
 
-bool Logger::add_to_queue(const DataStream& type) {
+bool Logger::add_to_queue(const DataStream &type) {
   queues_[type] = device_.get()->getOutputQueue(
       std::string(magic_enum::enum_name(type)), QUEUE_BUFFER_SIZE.at(type),
       /* blocking */ false);
@@ -349,7 +356,7 @@ bool Logger::add_to_queue(const DataStream& type) {
   return true;
 }
 
-double Logger::time_since_start(const TimePoint& time) const {
+double Logger::time_since_start(const TimePoint &time) const {
   static constexpr bool VERBOSE = false;
   if (!start_ts_) {
     LOG_IF(INFO, VERBOSE) << "Start timestamp is not initialized";

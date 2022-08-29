@@ -1,6 +1,7 @@
 #pragma once
 #include <pybind11/pybind11.h>
 
+#include "Eigen/Dense"
 #include "config.hpp"
 #include "logger.hpp"
 
@@ -17,6 +18,12 @@ class OAKDLoggerWrapper {
 
   void replay(std::string_view input_file) {
     return logger_->replay(input_file);
+  }
+
+  std::string sequential_read(
+      std::string_view input_file,
+      Eigen::Ref<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>> img) {
+    return logger_->sequential_read(input_file, img);
   }
 
   /**

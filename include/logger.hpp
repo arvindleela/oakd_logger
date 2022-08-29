@@ -5,6 +5,7 @@
 #include <depthai/depthai.hpp>
 #include <optional>
 
+#include "Eigen/Dense"
 #include "config.hpp"
 #include "logger_types.hpp"
 #include "packet_statistics.hpp"
@@ -39,6 +40,15 @@ class Logger {
    * @brief:    Replay from file
    */
   void replay(std::string_view input_file);
+
+  /**
+   * @brief:    Read the input file sequentially
+   * @param:    Raw input data
+   * @return:   Type of the next data packet
+   */
+  std::string sequential_read(
+      std::string_view input_file,
+      Eigen::Ref<Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>> img);
 
  private:
   /**

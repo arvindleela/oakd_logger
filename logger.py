@@ -1,10 +1,13 @@
 import sys
-sys.path.insert(0, "build")
 
+sys.path.insert(0, "cmake-build-debug")
+
+import numpy as np
 import logging
 from pathlib import Path
 import argparse
 from OAKDLogger import OAKDLogger
+
 
 def parse_args():
     """
@@ -15,7 +18,9 @@ def parse_args():
     parser.add_argument('logdir', help='Path where logs are written', type=str)
     parser.add_argument('--output', help='Output binary file name', type=str, default=None)
     parser.add_argument('--input', help='Input binary file name. If specified replay file', type=str, default=None)
+    parser.add_argument('--sequential', help='Read the input file sequentially', action='store_true')
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
@@ -36,8 +41,13 @@ def main():
         logger.start_logging()
     else:
         logging.info(f"In replay mode ...")
-        logger.replay(args.input)
+        if not args.sequential:
+            logger.replay(args.input)
+        else:
+            image = np.zeros((10, 10))
+            packet_type = logger.sequential_read(args.input, image)
+            breakpoint()
+
 
 if __name__ == '__main__':
     main()
-
