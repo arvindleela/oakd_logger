@@ -9,7 +9,7 @@ struct StatDataPoint {
   double dt{};  // Delta timestamp
 };
 
-template <size_t N>
+template<size_t N>
 class PacketStatistics {
  public:
   static constexpr size_t MAX_SEQ_NUM = 255;
@@ -20,51 +20,51 @@ class PacketStatistics {
       : min_dt_s_(min_dt_s), max_dt_s_(max_dt_s) {}
 
   void update_statistics(const size_t seq_num, const double timestamp) {
-    if (nullptr == last_timestamp_) {
-      last_timestamp_ = std::make_unique<double>(timestamp);
-    }
-    if (nullptr == last_seq_num_) {
-      last_seq_num_ = std::make_unique<size_t>(seq_num);
-    }
+      if (nullptr == last_timestamp_) {
+          last_timestamp_ = std::make_unique<double>(timestamp);
+      }
+      if (nullptr == last_seq_num_) {
+          last_seq_num_ = std::make_unique<size_t>(seq_num);
+      }
 
-    size_t ds = (seq_num + MAX_SEQ_NUM - *last_seq_num_) % MAX_SEQ_NUM;
-    double dt = timestamp - *last_timestamp_;
-    delta_.push({.ds = ds, .dt = dt});
+      size_t ds = (seq_num + MAX_SEQ_NUM - *last_seq_num_) % MAX_SEQ_NUM;
+      double dt = timestamp - *last_timestamp_;
+      delta_.push({.ds = ds, .dt = dt});
 
-    *last_timestamp_ = timestamp;
-    *last_seq_num_ = seq_num;
+      *last_timestamp_ = timestamp;
+      *last_seq_num_ = seq_num;
   }
 
-  void get_statistics(std::vector<StatDataPoint>& stat) const {
-    stat.clear();
-    auto start_iter = delta_.cbegin();
+  void get_statistics(std::vector<StatDataPoint> &stat) const {
+      stat.clear();
+      auto start_iter = delta_.cbegin();
 
-    while (start_iter != delta_.cend()) {
-      auto end_iter = std::distance(start_iter, delta_.cend()) <
-                              static_cast<long>(NUM_SLOT_ITEMS)
+      while (start_iter != delta_.cend()) {
+          auto end_iter = std::distance(start_iter, delta_.cend()) <
+              static_cast<long>(NUM_SLOT_ITEMS)
                           ? delta_.cend()
                           : std::next(start_iter, NUM_SLOT_ITEMS);
 
-      if (start_iter == end_iter) {
-        break;
-      }
+          if (start_iter == end_iter) {
+              break;
+          }
 
-      // Compute max ds and dt
-      const auto max_iter = std::max_element(
-          start_iter, end_iter,
-          [](const auto& a, const auto& b) { return a.dt < b.dt; });
-      stat.push_back(*max_iter);
-      start_iter = end_iter;
-    }
+          // Compute max ds and dt
+          const auto max_iter = std::max_element(
+              start_iter, end_iter,
+              [](const auto &a, const auto &b) { return a.dt < b.dt; });
+          stat.push_back(*max_iter);
+          start_iter = end_iter;
+      }
   }
 
   void info(const std::string_view identifier) {
-    std::stringstream msg;
-    msg << "Statistics, " << identifier;
-    for (const auto& delta : delta_) {
-      msg << "(" << delta.dt << ", " << delta.ds << "), ";
-    }
-    LOG(INFO) << msg.str();
+      std::stringstream msg;
+      msg << "Statistics, " << identifier;
+      for (const auto &delta : delta_) {
+          msg << "(" << delta.dt << ", " << delta.ds << "), ";
+      }
+      LOG(INFO) << msg.str();
   }
 
   // Some getters

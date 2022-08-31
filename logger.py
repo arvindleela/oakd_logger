@@ -1,10 +1,12 @@
-import sys
-sys.path.insert(0, "build")
-
 import logging
+from collections import defaultdict
 from pathlib import Path
 import argparse
+import pickle
 from OAKDLogger import OAKDLogger
+import numpy as np
+import cv2
+
 
 def parse_args():
     """
@@ -15,7 +17,10 @@ def parse_args():
     parser.add_argument('logdir', help='Path where logs are written', type=str)
     parser.add_argument('--output', help='Output binary file name', type=str, default=None)
     parser.add_argument('--input', help='Input binary file name. If specified replay file', type=str, default=None)
+    parser.add_argument('--sequential', help='If specified, read input file sequentially', action='store_true')
+    parser.add_argument('--pickle', help='If specified, sequential read is pickled', type=str, default=None)
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
@@ -36,8 +41,30 @@ def main():
         logger.start_logging()
     else:
         logging.info(f"In replay mode ...")
-        logger.replay(args.input)
+        if not args.sequential:
+            logger.replay(args.input)
+        else:
+            done = False
+            cam_packet = dict(img=np.ascontiguousarray(np.zeros((720, 1280), dtype=np.uint8)), timestamp=0.0)
+            imu_packet = dict(accelerometer=np.zeros(3), gyroscope=np.zeros(3), timestamp=0.0)
+            pickle_data = dict(manifest=[], imu_packets=[], cam_packets=[])
+            num_packets = defaultdict(int)
+            while not done:
+                data_type = logger.sequential_read(args.input, cam_packet, imu_packet)
+                num_packets[data_type] += 1
+                if args.pickle:
+                    pickle_data['manifest'].append(data_type)
+                    pickle_data['imu_packets'].append(imu_packet)
+                    pickle_data['cam_packets'].append(cam_packet)
+                done = data_type == data_type.INVALID
+            print("Done with sequential read with: ")
+            for data_type, num_packet in num_packets.items():
+                print(f"{data_type} : {num_packet}")
+
+            if args.pickle:
+                with open(args.pickle, 'wb') as f:
+                    pickle.dump(pickle_data, f)
+                    print(f"Wrote sequential read to {args.pickle}")
 
 if __name__ == '__main__':
     main()
-
