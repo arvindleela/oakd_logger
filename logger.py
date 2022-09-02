@@ -44,19 +44,26 @@ def main():
         if not args.sequential:
             logger.replay(args.input)
         else:
-            done = False
             cam_packet = dict(img=np.ascontiguousarray(np.zeros((720, 1280), dtype=np.uint8)), timestamp=0.0)
             imu_packet = dict(accelerometer=np.zeros(3), gyroscope=np.zeros(3), timestamp=0.0)
-            pickle_data = dict(manifest=[], imu_packets=[], cam_packets=[])
+            pickle_data = defaultdict(list)
             num_packets = defaultdict(int)
-            while not done:
+            while True:
                 data_type = logger.sequential_read(args.input, cam_packet, imu_packet)
-                num_packets[data_type] += 1
+                if data_type == data_type.INVALID:
+                    break
+
+                num_packets[data_type.name] += 1
                 if args.pickle:
-                    pickle_data['manifest'].append(data_type)
-                    pickle_data['imu_packets'].append(imu_packet)
-                    pickle_data['cam_packets'].append(cam_packet)
-                done = data_type == data_type.INVALID
+                    type_name = data_type.name
+                    pickle_data['manifest'].append(type_name)
+                    cam_type = (data_type == data_type.LEFT_MONO or
+                                data_type == data_type.RIGHT_MONO or
+                                data_type == data_type.RGB)
+                    if data_type == data_type.IMU:
+                        pickle_data[type_name].append(imu_packet)
+                    elif cam_type:
+                        pickle_data[type_name].append(cam_packet)
             print("Done with sequential read with: ")
             for data_type, num_packet in num_packets.items():
                 print(f"{data_type} : {num_packet}")
@@ -65,6 +72,7 @@ def main():
                 with open(args.pickle, 'wb') as f:
                     pickle.dump(pickle_data, f)
                     print(f"Wrote sequential read to {args.pickle}")
+
 
 if __name__ == '__main__':
     main()
