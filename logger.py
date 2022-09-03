@@ -1,3 +1,4 @@
+import copy
 import logging
 from collections import defaultdict
 from pathlib import Path
@@ -61,9 +62,9 @@ def main():
                                 data_type == data_type.RIGHT_MONO or
                                 data_type == data_type.RGB)
                     if data_type == data_type.IMU:
-                        pickle_data[type_name].append(imu_packet)
+                        pickle_data[type_name].append(copy.deepcopy(imu_packet))
                     elif cam_type:
-                        pickle_data[type_name].append(cam_packet)
+                        pickle_data[type_name].append(copy.deepcopy(cam_packet))
             print("Done with sequential read with: ")
             for data_type, num_packet in num_packets.items():
                 print(f"{data_type} : {num_packet}")
